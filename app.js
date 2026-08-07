@@ -75,6 +75,14 @@ function renderTable(tableBuffer) {
   return html;
 }
 
+function renderCodeBlock(lines) {
+  const rows = lines.length ? lines : [""];
+  const body = rows
+    .map((line) => `<div class="code-line">${escapeHtml(line) || "&nbsp;"}</div>`)
+    .join("");
+  return `<div class="code-block">${body}</div>`;
+}
+
 function renderMarkdown(markdown) {
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
   const html = [];
@@ -97,7 +105,7 @@ function renderMarkdown(markdown) {
 
   function closeCode() {
     if (codeOpen) {
-      html.push(`<pre><code>${escapeHtml(codeBuffer.join("\n"))}</code></pre>`);
+      html.push(renderCodeBlock(codeBuffer));
       codeOpen = false;
       codeBuffer = [];
     }
@@ -279,6 +287,12 @@ function buildInlineGmailHtml() {
   wrapper.querySelectorAll("*").forEach((node) => {
     const style = styleForTag(node.tagName);
     if (style) node.setAttribute("style", style);
+    if (node.classList.contains("code-block")) {
+      node.setAttribute("style", "margin:12px 0 16px;border:1px solid #dbe2ee;border-radius:8px;background:#f8fafc;padding:10px 12px;color:#0f172a;font-family:Consolas,Menlo,monospace;font-size:12px;line-height:1.5;max-width:100%;overflow-wrap:anywhere;word-break:break-word;");
+    }
+    if (node.classList.contains("code-line")) {
+      node.setAttribute("style", "margin:0;padding:0;color:#0f172a;font-family:Consolas,Menlo,monospace;font-size:12px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;");
+    }
     if (node.tagName.toLowerCase() === "pre") {
       node.querySelectorAll("code").forEach((code) => {
         code.setAttribute("style", "border:0;background:transparent;color:#0f172a;font-family:Consolas,Menlo,monospace;font-size:13px;padding:0;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;");
