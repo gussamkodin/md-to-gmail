@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MD to Gmail</title>
+  <link rel="stylesheet" href="style.css?v=20260807-3">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <img class="logo" src="icon.jpg" alt="MD to Gmail icon">
+        <div>
+          <h1>Paste report file md, copy hasil rapi ke Gmail.</h1>
+          <p class="subtle">created by: <a href="https://github.com/kenjisubagja" target="_blank" rel="noopener">KenjiSubagja</a></p>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button id="clearBtn" type="button">Clear</button>
+        <button id="copyLabelBtn" type="button">Copy Label</button>
+        <button id="copyGmailBtn" type="button" class="primary">Copy Gmail</button>
+      </div>
+    </header>
+
+    <section class="workspace">
+      <section class="pane input-pane">
+        <div class="pane-head">
+          <h2 class="pane-title">Report Input</h2>
+          <span id="charCount" class="metric">0 chars</span>
+        </div>
+        <div class="input-stack">
+          <label class="field-label" for="subjectInput">Label / Subject Gmail</label>
+          <input id="subjectInput" type="text" placeholder="Contoh: Reflected XSS">
+          <label class="field-label" for="markdownInput">Body Markdown</label>
+          <textarea id="markdownInput" spellcheck="false" placeholder="Paste body report .md di sini..."></textarea>
+        </div>
+      </section>
+
+      <section class="pane preview-pane">
+        <div class="pane-head">
+          <h2 class="pane-title">Gmail Preview</h2>
+          <span class="metric">Ready</span>
+        </div>
+        <article class="preview">
+          <div id="preview" class="gmail-doc">
+            <p>Hasil convert akan muncul di sini.</p>
+          </div>
+        </article>
+      </section>
+    </section>
+  </main>
+
+  <div id="toast" class="toast">Copied</div>
+  <script src="app.js?v=20260807-3"></script>
+</body>
+</html>
