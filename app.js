@@ -1,13 +1,13 @@
 const markdownInput = document.querySelector("#markdownInput");
-const subjectInput = document.querySelector("#subjectInput");
 const preview = document.querySelector("#preview");
+const translatePreview = document.querySelector("#translatePreview");
 const clearBtn = document.querySelector("#clearBtn");
-const copyLabelBtn = document.querySelector("#copyLabelBtn");
+const translateBtn = document.querySelector("#translateBtn");
 const copyGmailBtn = document.querySelector("#copyGmailBtn");
 const toast = document.querySelector("#toast");
 const charCount = document.querySelector("#charCount");
+const translateStatus = document.querySelector("#translateStatus");
 
-const sampleSubject = "Reflected XSS";
 const sampleReport = `## Summary
 Reflected XSS found on the search endpoint.
 
@@ -217,43 +217,6 @@ function markdownToText(markdown) {
     .trim();
 }
 
-function getSubject() {
-  const typedSubject = subjectInput.value.trim();
-  if (typedSubject) return typedSubject;
-
-  const firstHeading = markdownInput.value.match(/^#\s+(.+)$/m);
-  return firstHeading ? firstHeading[1].trim() : "";
-}
-
-function updatePreview() {
-  const value = markdownInput.value;
-  const renderedBody = value.trim() ? renderMarkdown(value) : "<p>Hasil convert akan muncul di sini.</p>";
-  const subject = getSubject();
-  preview.innerHTML = subject
-    ? `<h1>${escapeHtml(subject)}</h1>${renderedBody}`
-    : renderedBody;
-  charCount.textContent = `${value.length} chars`;
-}
-
-function showToast(message) {
-  toast.textContent = message;
-  toast.classList.add("show");
-  window.setTimeout(() => toast.classList.remove("show"), 1300);
-}
-
-async function copyLabel() {
-  const subject = getSubject();
-  await navigator.clipboard.writeText(subject);
-  showToast("Label copied");
-}
-
-async function copyPlainText() {
-  const subject = getSubject();
-  const body = markdownToText(markdownInput.value);
-  await navigator.clipboard.writeText([subject, body].filter(Boolean).join("\n\n"));
-  showToast("Plain text copied");
-}
-
 function styleForTag(tagName) {
   const tag = tagName.toLowerCase();
   const styles = {
@@ -336,35 +299,87 @@ async function copyGmailHtml() {
   showToast("Gmail-ready copy done");
 }
 
-async function openGmailCompose() {
-  const subject = getSubject();
-  const body = markdownToText(markdownInput.value);
-  const params = new URLSearchParams({
-    view: "cm",
-    fs: "1",
-    tf: "1",
-    su: subject,
-    body
-  });
-  const url = `https://mail.google.com/mail/?${params.toString()}`;
-  window.open(url, "_blank");
-  writeRichClipboard()
-    .then(() => showToast("Rich report copied, Gmail opened"))
-    .catch(() => showToast("Gmail opened"));
+async function translateMarkdown(text, targetLang = "id") {
+  const segments = text.split(/(```[\s\S]*?```)/g).filter(Boolean);
+  const translated = [];
+
+  for (const segment of segments) {
+    if (segment.startsWith("```")) {
+      translated.push(segment);
+      continue;
+    }
+
+    const escaped = segment.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const params = new URLSearchParams({
+      client: "gtx",
+      sl: "auto",
+      tl: targetLang,
+      dt: "t",
+      q: escaped
+    });
+
+    const res = await fetch(`https://translate.googleapis.com/translate_a/single?${params.toString()}`);
+    if (!res.ok) throw new Error(`Translate failed: ${res.status}`);
+    const json = await res.json();
+
+    const sentences = json[0] || [];
+    const merged = sentences.map((s) => s[0] || "").join("");
+    translated.push(merged);
+  }
+
+  return translated.join("");
+}
+
+async function doTranslate() {
+  const raw = markdownInput.value;
+  if (!raw.trim()) {
+    showToast("Isi markdown dulu");
+    return;
+  }
+
+  translateBtn.disabled = true;
+  translateStatus.textContent = "Translating...";
+  translateBtn.textContent = "Translating...";
+
+  try {
+    const translated = await translateMarkdown(raw, "id");
+    translatePreview.innerHTML = renderMarkdown(translated);
+    translateStatus.textContent = "Translated";
+    showToast("Translated to Indonesia");
+  } catch (e) {
+    console.error(e);
+    translateStatus.textContent = "Error";
+    showToast("Translate failed");
+  } finally {
+    translateBtn.disabled = false;
+    translateBtn.textContent = "Translate";
+  }
+}
+
+function updatePreview() {
+  const value = markdownInput.value;
+  const renderedBody = value.trim() ? renderMarkdown(value) : "<p>Hasil convert akan muncul di sini.</p>";
+  preview.innerHTML = renderedBody;
+  charCount.textContent = `${value.length} chars`;
+}
+
+function showToast(message) {
+  toast.textContent = message;
+  toast.classList.add("show");
+  window.setTimeout(() => toast.classList.remove("show"), 1300);
 }
 
 function initApp() {
-  subjectInput.value = sampleSubject;
   markdownInput.value = sampleReport;
-  subjectInput.addEventListener("input", updatePreview);
   markdownInput.addEventListener("input", updatePreview);
   clearBtn.addEventListener("click", () => {
-    subjectInput.value = "";
     markdownInput.value = "";
     updatePreview();
-    subjectInput.focus();
+    translatePreview.innerHTML = '<p>Klik <strong>Translate</strong> buat liat versi bahasa Indonesia.</p>';
+    translateStatus.textContent = "—";
+    markdownInput.focus();
   });
-  copyLabelBtn.addEventListener("click", copyLabel);
+  translateBtn.addEventListener("click", doTranslate);
   copyGmailBtn.addEventListener("click", copyGmailHtml);
   updatePreview();
 }
