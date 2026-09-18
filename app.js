@@ -299,35 +299,151 @@ async function copyGmailHtml() {
   showToast("Gmail-ready copy done");
 }
 
-async function translateMarkdown(text, targetLang = "id") {
-  const segments = text.split(/(```[\s\S]*?```)/g).filter(Boolean);
-  const translated = [];
+const TRANSLATE_URL = "https://translate.googleapis.com/translate_a/single";
 
-  for (const segment of segments) {
-    if (segment.startsWith("```")) {
-      translated.push(segment);
+async function translateSegment(text, targetLang) {
+  if (!text.trim()) return text;
+  const params = new URLSearchParams({
+    client: "gtx",
+    sl: "auto",
+    tl: targetLang,
+    dt: "t",
+    q: text
+  });
+
+  const res = await fetch(`${TRANSLATE_URL}?${params.toString()}`);
+  if (!res.ok) throw new Error(`Translate failed: ${res.status}`);
+  const json = await res.json();
+  const out = (json[0] || []).map((chunk) => chunk[0] || "").join("");
+  return out.replace(/\s*\n\s*/g, " ").trim();
+}
+
+const INLINE_TOKEN_RE = /(`[^`]+`)|(\[[^\]]+\]\([^)]+\))|(https?:\/\/[^\s)]+)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*)/g;
+
+function tokenizeInline(value) {
+  const tokens = [];
+  let cursor = 0;
+  let match;
+
+  INLINE_TOKEN_RE.lastIndex = 0;
+  while ((match = INLINE_TOKEN_RE.exec(value))) {
+    if (match.index > cursor) {
+      tokens.push({ kind: "text", value: value.slice(cursor, match.index) });
+    }
+    if (match[1]) tokens.push({ kind: "verbatim", value: match[1] });
+    else if (match[2]) tokens.push({ kind: "verbatim", value: match[2] });
+    else if (match[3]) tokens.push({ kind: "verbatim", value: match[3] });
+    else if (match[4]) tokens.push({ kind: "bold", value: match[4].slice(2, -2) });
+    else tokens.push({ kind: "em", value: match[5].slice(1, -1) });
+    cursor = INLINE_TOKEN_RE.lastIndex;
+  }
+
+  if (cursor < value.length) tokens.push({ kind: "text", value: value.slice(cursor) });
+  return tokens;
+}
+
+const LINE_PREFIX_RE = /^(\s*(?:#{1,6}\s+|[-*+]\s+|\d+\.\s+|>\s+)?)([\s\S]*)$/;
+const TABLE_ROW_RE = /\|/;
+const TABLE_SEPARATOR_RE = /^\s*\|?[\s:|-]+\|[\s:|-]*$/;
+
+function planTokens(value, jobs) {
+  return tokenizeInline(value).map((token) => {
+    if (token.kind === "verbatim" || !token.value.trim()) {
+      return { kind: "verbatim", value: token.value };
+    }
+    const id = jobs.length;
+    jobs.push({ id, text: token.value, kind: token.kind });
+    return { kind: "job", id };
+  });
+}
+
+function buildTranslatePlan(markdown) {
+  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  const plan = [];
+  const jobs = [];
+  let codeOpen = false;
+
+  for (const line of lines) {
+    if (line.trim().startsWith("```")) {
+      codeOpen = !codeOpen;
+      plan.push({ kind: "raw", value: line });
       continue;
     }
 
-    const escaped = segment.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const params = new URLSearchParams({
-      client: "gtx",
-      sl: "auto",
-      tl: targetLang,
-      dt: "t",
-      q: escaped
-    });
+    if (codeOpen || !line.trim() || (TABLE_ROW_RE.test(line) && TABLE_SEPARATOR_RE.test(line))) {
+      plan.push({ kind: "raw", value: line });
+      continue;
+    }
 
-    const res = await fetch(`https://translate.googleapis.com/translate_a/single?${params.toString()}`);
-    if (!res.ok) throw new Error(`Translate failed: ${res.status}`);
-    const json = await res.json();
+    if (TABLE_ROW_RE.test(line)) {
+      const cells = line.split("|").map((cell) => {
+        const padded = cell.match(/^(\s*)([\s\S]*?)(\s*)$/);
+        const body = padded[2];
+        if (!body.trim()) return { kind: "raw", value: cell };
+        return {
+          kind: "cell",
+          lead: padded[1],
+          tail: padded[3],
+          tokens: planTokens(body, jobs)
+        };
+      });
+      plan.push({ kind: "table", cells });
+      continue;
+    }
 
-    const sentences = json[0] || [];
-    const merged = sentences.map((s) => s[0] || "").join("");
-    translated.push(merged);
+    const prefixMatch = line.match(LINE_PREFIX_RE);
+    const prefix = prefixMatch[1];
+    const body = prefixMatch[2];
+    if (!body.trim()) {
+      plan.push({ kind: "raw", value: line });
+      continue;
+    }
+    plan.push({ kind: "line", prefix, tokens: planTokens(body, jobs) });
   }
 
-  return translated.join("");
+  return { plan, jobs };
+}
+
+function assemblePlan(plan, results) {
+  const renderTokens = (tokens) =>
+    tokens
+      .map((token) => {
+        if (token.kind === "verbatim") return token.value;
+        const translated = results[token.id] ?? "";
+        const job = token.job;
+        return job && job.kind === "bold" ? `**${translated}**` : job && job.kind === "em" ? `*${translated}*` : translated;
+      })
+      .join("");
+
+  return plan
+    .map((entry) => {
+      if (entry.kind === "raw") return entry.value;
+      if (entry.kind === "line") return entry.prefix + renderTokens(entry.tokens);
+      if (entry.kind === "table") {
+        return entry.cells
+          .map((cell) => (cell.kind === "raw" ? cell.value : cell.lead + renderTokens(cell.tokens) + cell.tail))
+          .join("|");
+      }
+      return "";
+    })
+    .join("\n");
+}
+
+async function translateMarkdown(markdown, targetLang = "id", onProgress) {
+  const { plan, jobs } = buildTranslatePlan(markdown);
+  const results = new Array(jobs.length).fill("");
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < jobs.length) {
+      const job = jobs[cursor++];
+      results[job.id] = await translateSegment(job.text, targetLang);
+      onProgress?.(cursor, jobs.length);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(6, jobs.length) }, worker));
+  return assemblePlan(plan, results);
 }
 
 async function doTranslate() {
@@ -338,11 +454,13 @@ async function doTranslate() {
   }
 
   translateBtn.disabled = true;
-  translateStatus.textContent = "Translating...";
   translateBtn.textContent = "Translating...";
+  translateStatus.textContent = "0%";
 
   try {
-    const translated = await translateMarkdown(raw, "id");
+    const translated = await translateMarkdown(raw, "id", (done, total) => {
+      translateStatus.textContent = total ? `${Math.round((done / total) * 100)}% (${done}/${total})` : "Translated";
+    });
     translatePreview.innerHTML = renderMarkdown(translated);
     translateStatus.textContent = "Translated";
     showToast("Translated to Indonesia");
