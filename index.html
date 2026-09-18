@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MD to Gmail</title>
-  <link rel="stylesheet" href="style.css?v=20260807-4">
+  <link rel="stylesheet" href="style.css?v=20260918">
 </head>
 <body>
   <main class="app">
@@ -18,7 +18,7 @@
       </div>
       <div class="toolbar">
         <button id="clearBtn" type="button">Clear</button>
-        <button id="copyLabelBtn" type="button">Copy Label</button>
+        <button id="translateBtn" type="button">Translate</button>
         <button id="copyGmailBtn" type="button" class="primary">Copy Gmail</button>
       </div>
     </header>
@@ -29,29 +29,38 @@
           <h2 class="pane-title">Report Input</h2>
           <span id="charCount" class="metric">0 chars</span>
         </div>
-        <div class="input-stack">
-          <label class="field-label" for="subjectInput">Label / Subject Gmail</label>
-          <input id="subjectInput" type="text" placeholder="Contoh: Reflected XSS">
-          <label class="field-label" for="markdownInput">Body Markdown</label>
-          <textarea id="markdownInput" spellcheck="false" placeholder="Paste body report .md di sini..."></textarea>
-        </div>
+        <textarea id="markdownInput" spellcheck="false" placeholder="Paste body report .md di sini..."></textarea>
       </section>
 
-      <section class="pane preview-pane">
-        <div class="pane-head">
-          <h2 class="pane-title">Gmail Preview</h2>
-          <span class="metric">Ready</span>
-        </div>
-        <article class="preview">
-          <div id="preview" class="gmail-doc">
-            <p>Hasil convert akan muncul di sini.</p>
+      <div class="right-col">
+        <section class="pane preview-pane">
+          <div class="pane-head">
+            <h2 class="pane-title">Gmail Preview</h2>
+            <span class="metric">Original</span>
           </div>
-        </article>
-      </section>
+          <article class="preview">
+            <div id="preview" class="gmail-doc">
+              <p>Hasil convert akan muncul di sini.</p>
+            </div>
+          </article>
+        </section>
+
+        <section class="pane translate-pane">
+          <div class="pane-head">
+            <h2 class="pane-title">Translate to Indonesia</h2>
+            <span id="translateStatus" class="metric">—</span>
+          </div>
+          <article class="preview">
+            <div id="translatePreview" class="gmail-doc">
+              <p>Klik <strong>Translate</strong> buat liat versi bahasa Indonesia.</p>
+            </div>
+          </article>
+        </section>
+      </div>
     </section>
   </main>
 
   <div id="toast" class="toast">Copied</div>
-  <script src="app.js?v=20260807-4"></script>
+  <script src="app.js?v=20260918"></script>
 </body>
 </html>
